@@ -22,8 +22,10 @@ create table if not exists work_items (
   priority text not null default 'medium',
   due_date date,
   archived boolean not null default false,
+  risk_score numeric not null default 0,
   created_at timestamptz not null default now()
 );
+alter table work_items add column if not exists risk_score numeric not null default 0;
 alter table work_items enable row level security;
 drop policy if exists "work_items_v1_read" on work_items;
 create policy "work_items_v1_read" on work_items for select using (true);
@@ -102,18 +104,37 @@ insert into team_members (id, name, email, role) values
   ('a1000000-0000-0000-0000-000000000001', 'Jordan Lee', 'jordan@example.com', 'admin'),
   ('a1000000-0000-0000-0000-000000000002', 'Sam Rivera', 'sam@example.com', 'member'),
   ('a1000000-0000-0000-0000-000000000003', 'Alex Kim', 'alex@example.com', 'member'),
-  ('a1000000-0000-0000-0000-000000000004', 'Casey Patel', 'casey@example.com', 'viewer');
+  ('a1000000-0000-0000-0000-000000000004', 'Casey Patel', 'casey@example.com', 'viewer')
+on conflict (id) do update set
+  name = excluded.name,
+  email = excluded.email,
+  role = excluded.role;
 
-insert into work_items (id, title, description, owner_id, status, priority, due_date) values
-  ('b1000000-0000-0000-0000-000000000001', 'Q3 Vendor Contract Renewal', 'Renew contracts with three key vendors before end of quarter.', 'a1000000-0000-0000-0000-000000000001', 'in_progress', 'high', current_date + 14),
-  ('b1000000-0000-0000-0000-000000000002', 'Onboarding Process Update', 'Revise onboarding checklist and update shared drive materials.', 'a1000000-0000-0000-0000-000000000002', 'in_progress', 'medium', current_date + 7),
-  ('b1000000-0000-0000-0000-000000000003', 'Monthly Reporting Template', 'Standardise the monthly ops report and get sign-off from leads.', 'a1000000-0000-0000-0000-000000000003', 'blocked', 'high', current_date + 3),
-  ('b1000000-0000-0000-0000-000000000004', 'Team Tooling Audit', 'Inventory all current tools and flag redundant subscriptions.', 'a1000000-0000-0000-0000-000000000002', 'not_started', 'low', current_date + 21),
-  ('b1000000-0000-0000-0000-000000000005', 'Budget Tracker Handover', 'Transfer ownership of budget tracker spreadsheet to new lead.', 'a1000000-0000-0000-0000-000000000001', 'complete', 'medium', current_date - 2);
+insert into work_items (id, title, description, owner_id, status, priority, due_date, risk_score) values
+  ('b1000000-0000-0000-0000-000000000001', 'Q3 Vendor Contract Renewal', 'Renew contracts with three key vendors before end of quarter.', 'a1000000-0000-0000-0000-000000000002', 'in_progress', 'high', current_date + 14, 0.06),
+  ('b1000000-0000-0000-0000-000000000002', 'Onboarding Process Update', 'Revise onboarding checklist and update shared drive materials.', 'a1000000-0000-0000-0000-000000000002', 'in_progress', 'medium', current_date + 7, 0.08),
+  ('b1000000-0000-0000-0000-000000000003', 'Monthly Reporting Template', 'Standardise the monthly ops report and get sign-off from leads.', 'a1000000-0000-0000-0000-000000000003', 'blocked', 'high', current_date + 3, 0.58),
+  ('b1000000-0000-0000-0000-000000000004', 'Team Tooling Audit', 'Inventory all current tools and flag redundant subscriptions.', 'a1000000-0000-0000-0000-000000000002', 'not_started', 'low', current_date + 21, 0.20),
+  ('b1000000-0000-0000-0000-000000000005', 'Budget Tracker Handover', 'Transfer ownership of budget tracker spreadsheet to new lead.', 'a1000000-0000-0000-0000-000000000001', 'complete', 'medium', current_date - 2, 0)
+on conflict (id) do update set
+  title = excluded.title,
+  description = excluded.description,
+  owner_id = excluded.owner_id,
+  priority = excluded.priority,
+  due_date = excluded.due_date;
 
-insert into weekly_updates (work_item_id, submitted_by, week_start, status, progress_notes, blockers, hours_spent, is_current) values
-  ('b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', date_trunc('week', current_date)::date, 'in_progress', 'Sent renewal drafts to two of three vendors. Awaiting legal review.', null, 3.5, true),
-  ('b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', (date_trunc('week', current_date) - interval '7 days')::date, 'in_progress', 'Identified contacts at all three vendors and drafted initial terms.', null, 2.0, false),
-  ('b1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000002', date_trunc('week', current_date)::date, 'in_progress', 'Updated first three sections of checklist. Shared draft for feedback.', null, 4.0, true),
-  ('b1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000003', date_trunc('week', current_date)::date, 'blocked', 'Template drafted but waiting on sign-off from two leads who are on leave.', 'Two approvers on leave until next Monday.', 1.5, true),
-  ('b1000000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000001', (date_trunc('week', current_date) - interval '7 days')::date, 'complete', 'Handover complete. New lead confirmed access and understanding.', null, 1.0, true);
+insert into weekly_updates (id, work_item_id, submitted_by, week_start, status, progress_notes, blockers, hours_spent, is_current) values
+  ('c1000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000002', date_trunc('week', current_date)::date, 'in_progress', 'Sent renewal drafts to two of three vendors. Awaiting legal review.', 'Legal review is the remaining blocker before final vendor edits.', 3.5, true),
+  ('c1000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000002', (date_trunc('week', current_date) - interval '7 days')::date, 'in_progress', 'Identified contacts at all three vendors and drafted initial terms.', null, 2.0, false),
+  ('c1000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000002', date_trunc('week', current_date)::date, 'in_progress', 'Updated first three sections of checklist. Shared draft for feedback.', null, 4.0, true),
+  ('c1000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000003', date_trunc('week', current_date)::date, 'blocked', 'Template drafted but waiting on sign-off from two leads who are on leave.', 'Two approvers on leave until next Monday.', 1.5, true),
+  ('c1000000-0000-0000-0000-000000000005', 'b1000000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000001', (date_trunc('week', current_date) - interval '7 days')::date, 'complete', 'Handover complete. New lead confirmed access and understanding.', null, 1.0, true)
+on conflict (id) do update set
+  work_item_id = excluded.work_item_id,
+  submitted_by = excluded.submitted_by,
+  week_start = excluded.week_start,
+  status = excluded.status,
+  progress_notes = excluded.progress_notes,
+  blockers = excluded.blockers,
+  hours_spent = excluded.hours_spent,
+  is_current = excluded.is_current;
