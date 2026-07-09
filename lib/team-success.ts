@@ -21,7 +21,7 @@ export type WorkItem = {
   priority: Priority;
   due_date: string | null;
   archived: boolean;
-  risk_score: number;
+  risk_score?: number | null;
   created_at: string;
 };
 
@@ -48,7 +48,8 @@ export type Activity = {
   created_at: string;
 };
 
-export type WorkItemView = WorkItem & {
+export type WorkItemView = Omit<WorkItem, "risk_score"> & {
+  risk_score: number;
   owner: TeamMember | null;
   latestUpdate: WeeklyUpdate | null;
   updateCount: number;
@@ -104,6 +105,8 @@ const demoUpdates: WeeklyUpdate[] = [
   { id: "c1000000-0000-0000-0000-000000000005", user_id: null, work_item_id: demoItems[4].id, submitted_by: demoMembers[0].id, week_start: isoDate(-7), status: "complete", progress_notes: "Handover complete. New lead confirmed access and understanding.", blockers: null, hours_spent: 1, is_current: true, created_at: isoDate(-7) },
 ];
 
+let seedPromise: Promise<void> | null = null;
+
 export function hasSupabaseEnv() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -144,8 +147,10 @@ function mergeItems(items: WorkItem[], members: TeamMember[], updates: WeeklyUpd
       const itemUpdates = updates
         .filter((update) => update.work_item_id === item.id)
         .sort((a, b) => Number(new Date(b.created_at)) - Number(new Date(a.created_at)));
+      const riskScore = item.risk_score ?? calculateRiskScore(item, itemUpdates.find((update) => update.is_current) ?? itemUpdates[0] ?? null);
       return {
         ...item,
+        risk_score: riskScore,
         owner: members.find((member) => member.id === item.owner_id) ?? null,
         latestUpdate: itemUpdates.find((update) => update.is_current) ?? itemUpdates[0] ?? null,
         updateCount: itemUpdates.length,
@@ -154,8 +159,52 @@ function mergeItems(items: WorkItem[], members: TeamMember[], updates: WeeklyUpd
     .sort((a, b) => statusRank[a.status] - statusRank[b.status] || b.risk_score - a.risk_score || a.title.localeCompare(b.title));
 }
 
+async function ensureDemoData() {
+  if (!hasSupabaseEnv()) return;
+  if (!seedPromise) {
+    seedPromise = (async () => {
+      const supabase = await createClient();
+      await supabase.from("team_members").upsert(
+        demoMembers.map(({ id, name, email, role }) => ({ id, name, email, role })),
+        { onConflict: "id" },
+      );
+      await supabase.from("work_items").upsert(
+        demoItems.map(({ id, title, description, owner_id, status, priority, due_date, archived }) => ({
+          id,
+          title,
+          description,
+          owner_id,
+          status,
+          priority,
+          due_date,
+          archived,
+        })),
+        { onConflict: "id" },
+      );
+      await supabase.from("weekly_updates").upsert(
+        demoUpdates.map(({ id, work_item_id, submitted_by, week_start, status, progress_notes, blockers, hours_spent, is_current }) => ({
+          id,
+          work_item_id,
+          submitted_by,
+          week_start,
+          status,
+          progress_notes,
+          blockers,
+          hours_spent,
+          is_current,
+        })),
+        { onConflict: "id" },
+      );
+    })();
+  }
+  await seedPromise.catch(() => {
+    seedPromise = null;
+  });
+}
+
 export async function getTeamMembers() {
   if (!hasSupabaseEnv()) return demoMembers;
+  await ensureDemoData();
   const supabase = await createClient();
   const { data, error } = await supabase.from("team_members").select("*").order("name");
   if (error) throw new Error(error.message);
@@ -164,6 +213,7 @@ export async function getTeamMembers() {
 
 export async function getWorkItems() {
   if (!hasSupabaseEnv()) return mergeItems(demoItems, demoMembers, demoUpdates);
+  await ensureDemoData();
   const supabase = await createClient();
   const [{ data: items, error: itemsError }, { data: members, error: membersError }, { data: updates, error: updatesError }] = await Promise.all([
     supabase.from("work_items").select("*").order("created_at", { ascending: false }),
@@ -179,6 +229,7 @@ export async function getWorkItem(id: string) {
     const item = mergeItems(demoItems, demoMembers, demoUpdates).find((entry) => entry.id === id);
     return item ? { item, members: demoMembers, updates: demoUpdates.filter((update) => update.work_item_id === id), activities: [] as Activity[] } : null;
   }
+  await ensureDemoData();
   const supabase = await createClient();
   const [{ data: item, error: itemError }, { data: members, error: membersError }, { data: updates, error: updatesError }, { data: activities, error: activitiesError }] = await Promise.all([
     supabase.from("work_items").select("*").eq("id", id).single(),

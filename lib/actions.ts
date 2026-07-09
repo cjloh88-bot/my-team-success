@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
-  calculateRiskScore,
   hasSupabaseEnv,
   isAllowedTransition,
   type Priority,
@@ -59,7 +58,6 @@ export async function createWorkItem(formData: FormData) {
   if (!title || !ownerId) redirect("/work-items/new?error=Title and owner are required");
 
   const supabase = await createClient();
-  const riskScore = calculateRiskScore({ status, due_date: nullableText(formData, "due_date") }, null);
   const { data, error } = await supabase
     .from("work_items")
     .insert({
@@ -69,7 +67,6 @@ export async function createWorkItem(formData: FormData) {
       due_date: nullableText(formData, "due_date"),
       priority,
       status,
-      risk_score: riskScore,
     })
     .select("*")
     .single();
@@ -178,10 +175,9 @@ export async function submitWeeklyUpdate(formData: FormData) {
 
   if (updateError) redirect(`/work-items/${workItemId}?error=${encodeURIComponent(updateError.message)}`);
 
-  const riskScore = calculateRiskScore({ status, due_date: before.due_date }, update as WeeklyUpdate);
   const { data: after, error: workItemError } = await supabase
     .from("work_items")
-    .update({ status, risk_score: riskScore })
+    .update({ status })
     .eq("id", workItemId)
     .select("*")
     .single();
