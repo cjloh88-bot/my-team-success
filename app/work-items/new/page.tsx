@@ -1,5 +1,6 @@
 import { Field, Notice, Shell } from "@/app/components";
 import { createWorkItem } from "@/lib/actions";
+import { canWrite, getCurrentProfile } from "@/lib/auth";
 import { getTeamMembers, priorityOptions, statusOptions } from "@/lib/team-success";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,8 @@ type PageProps = {
 };
 
 export default async function NewWorkItemPage({ searchParams }: PageProps) {
-  const [members, params] = await Promise.all([getTeamMembers(), searchParams]);
+  const [members, params, profile] = await Promise.all([getTeamMembers(), searchParams, getCurrentProfile()]);
+  const writable = canWrite(profile);
   return (
     <Shell>
       <Notice error={params?.error} success={params?.success} />
@@ -20,6 +22,13 @@ export default async function NewWorkItemPage({ searchParams }: PageProps) {
             <h1>Log Work Item</h1>
           </div>
         </div>
+        {!writable ? (
+          <div className="empty-state small-state">
+            <h2>Login required</h2>
+            <p>Members and admins can log work items. Viewers can browse the shared dashboard.</p>
+            <a className="button-primary" href="/login?next=/work-items/new">Log In</a>
+          </div>
+        ) : (
         <form action={createWorkItem} className="stack-form">
           <Field label="Title"><input name="title" required /></Field>
           <Field label="Description"><textarea name="description" rows={4} /></Field>
@@ -43,6 +52,7 @@ export default async function NewWorkItemPage({ searchParams }: PageProps) {
           </div>
           <button className="button-primary" type="submit">Save Work Item</button>
         </form>
+        )}
       </section>
     </Shell>
   );

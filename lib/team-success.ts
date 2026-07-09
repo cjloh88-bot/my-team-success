@@ -5,6 +5,7 @@ export type Priority = "low" | "medium" | "high";
 
 export type TeamMember = {
   id: string;
+  user_id?: string | null;
   name: string;
   email: string | null;
   role: "admin" | "member" | "viewer";

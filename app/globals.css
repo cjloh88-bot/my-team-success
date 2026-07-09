@@ -50,7 +50,8 @@ textarea:focus {
 .nav-link,
 .button-primary,
 .button-secondary,
-.button-ghost {
+.button-ghost,
+.button-danger {
   display: inline-flex;
   min-height: 2.35rem;
   align-items: center;
@@ -90,10 +91,27 @@ textarea:focus {
   color: var(--muted);
 }
 
+.button-danger {
+  border: 1px solid #fecdd3;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.identity-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border-top: 1px solid var(--line);
+  padding: 0.45rem 1rem;
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .page-heading {
@@ -136,6 +154,33 @@ textarea:focus {
   grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.focus-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.focus-strip div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 0.8rem;
+}
+
+.focus-strip span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.focus-strip strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.5rem;
 }
 
 .toggle {
@@ -265,6 +310,13 @@ textarea:focus {
   align-items: start;
 }
 
+.auth-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1rem;
+  align-items: start;
+}
+
 .detail-main,
 .history,
 .stack-form,
@@ -294,6 +346,37 @@ textarea:focus {
   place-items: start;
   gap: 0.6rem;
   min-height: 14rem;
+}
+
+.small-state {
+  min-height: auto;
+  padding: 0.85rem;
+}
+
+.static-panel {
+  position: static;
+}
+
+.admin-panel {
+  margin-bottom: 1rem;
+}
+
+.admin-panel h2 {
+  margin: 0 0 0.75rem;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 0.75fr auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.admin-member-tools {
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
 }
 
 .notice-error,
@@ -328,6 +411,9 @@ textarea:focus {
 
 @media (max-width: 860px) {
   .filter-bar,
+  .focus-strip,
+  .auth-grid,
+  .inline-form,
   .meta-grid,
   .metric-grid,
   .form-grid,

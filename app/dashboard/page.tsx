@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DateText, Notice, PriorityBadge, Shell, StatusBadge } from "@/app/components";
+import { canWrite, getCurrentProfile } from "@/lib/auth";
 import { getTeamMembers, getWorkItems, priorityOptions, statusOptions } from "@/lib/team-success";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,8 @@ type PageProps = {
 
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
-  const [items, members] = await Promise.all([getWorkItems(), getTeamMembers()]);
+  const [items, members, profile] = await Promise.all([getWorkItems(), getTeamMembers(), getCurrentProfile()]);
+  const writable = canWrite(profile);
   const showArchived = params.archived === "true";
   const filtered = items.filter((item) => {
     if (!showArchived && item.archived) return false;
@@ -19,6 +21,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     if (params.priority && item.priority !== params.priority) return false;
     return true;
   });
+  const blockedCount = items.filter((item) => item.status === "blocked" && !item.archived).length;
+  const overdueCount = items.filter((item) => item.due_date && new Date(item.due_date) < new Date() && item.status !== "complete" && !item.archived).length;
+  const staleCount = items.filter((item) => item.latestUpdate && (Date.now() - new Date(item.latestUpdate.created_at).getTime()) / 86400000 >= 7 && !item.archived).length;
+  const activeCount = items.filter((item) => !item.archived && item.status !== "complete").length;
 
   return (
     <Shell>
@@ -28,7 +34,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <p className="eyebrow">Shared weekly progress</p>
           <h1>Dashboard</h1>
         </div>
-        <Link href="/work-items/new" className="button-primary">Log Work Item</Link>
+        <Link href={writable ? "/work-items/new" : "/login?next=/work-items/new"} className="button-primary">Log Work Item</Link>
       </section>
 
       <form className="filter-bar">
@@ -52,11 +58,18 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <Link href="/dashboard" className="button-ghost">Reset</Link>
       </form>
 
+      <section className="focus-strip">
+        <div><span>Active</span><strong>{activeCount}</strong></div>
+        <div><span>Blocked</span><strong>{blockedCount}</strong></div>
+        <div><span>Overdue</span><strong>{overdueCount}</strong></div>
+        <div><span>No update 7+ days</span><strong>{staleCount}</strong></div>
+      </section>
+
       {filtered.length === 0 ? (
         <section className="empty-state">
           <h2>No work items yet</h2>
           <p>Log the first work item to start tracking owner, status, priority, and weekly updates.</p>
-          <Link href="/work-items/new" className="button-primary">Log Work Item</Link>
+          <Link href={writable ? "/work-items/new" : "/login?next=/work-items/new"} className="button-primary">Log Work Item</Link>
         </section>
       ) : (
         <section className="item-grid">

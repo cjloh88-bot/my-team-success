@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateText, Field, Metric, Notice, PriorityBadge, Shell, StatusBadge } from "@/app/components";
 import { archiveWorkItem, submitWeeklyUpdate } from "@/lib/actions";
+import { canWrite, getCurrentProfile, isAdmin } from "@/lib/auth";
 import { getWorkItem, statusOptions } from "@/lib/team-success";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +14,12 @@ type PageProps = {
 
 export default async function WorkItemDetailPage({ params, searchParams }: PageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const data = await getWorkItem(id);
+  const [data, profile] = await Promise.all([getWorkItem(id), getCurrentProfile()]);
   if (!data) notFound();
   const { item, members, updates, activities } = data;
+  const writable = canWrite(profile);
+  const canManageItem = isAdmin(profile) || (writable && profile?.member.id === item.owner_id);
+  const submittedBy = isAdmin(profile) ? item.owner_id ?? profile?.member.id ?? "" : profile?.member.id ?? "";
 
   return (
     <Shell>
@@ -27,14 +31,14 @@ export default async function WorkItemDetailPage({ params, searchParams }: PageP
               <p className="eyebrow">Work item</p>
               <h1>{item.title}</h1>
             </div>
-            <div className="button-row">
+            {canManageItem ? <div className="button-row">
               <Link className="button-secondary" href={`/work-items/${item.id}/edit`}>Edit</Link>
               <form action={archiveWorkItem}>
                 <input type="hidden" name="id" value={item.id} />
                 <input type="hidden" name="actor_id" value={item.owner_id ?? ""} />
                 <button className="button-ghost" type="submit">Archive</button>
               </form>
-            </div>
+            </div> : null}
           </div>
           <p className="lead">{item.description}</p>
           <div className="metric-grid">
@@ -75,11 +79,20 @@ export default async function WorkItemDetailPage({ params, searchParams }: PageP
 
         <aside className="side-panel">
           <h2>Submit Weekly Update</h2>
+          {!writable ? (
+            <div className="empty-state small-state">
+              <h2>Login required</h2>
+              <p>Members and admins can submit weekly updates. Viewers can read update history.</p>
+              <Link href={`/login?next=/work-items/${item.id}`} className="button-primary">Log In</Link>
+            </div>
+          ) : (
           <form action={submitWeeklyUpdate} className="stack-form">
             <input type="hidden" name="work_item_id" value={item.id} />
             <Field label="Submitted by">
-              <select name="submitted_by" defaultValue={item.owner_id ?? ""} required>
-                {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+              <select name="submitted_by" defaultValue={submittedBy} required>
+                {isAdmin(profile)
+                  ? members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)
+                  : <option value={profile?.member.id}>{profile?.member.name}</option>}
               </select>
             </Field>
             <Field label="Status">
@@ -92,6 +105,7 @@ export default async function WorkItemDetailPage({ params, searchParams }: PageP
             <Field label="Hours"><input name="hours_spent" type="number" min="0" step="0.25" defaultValue="1" /></Field>
             <button className="button-primary" type="submit">Submit Weekly Update</button>
           </form>
+          )}
 
           <div className="activity-mini">
             <h2>Recent Activity</h2>

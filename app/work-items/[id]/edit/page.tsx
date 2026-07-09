@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Field, Notice, Shell } from "@/app/components";
 import { updateWorkItem } from "@/lib/actions";
+import { canWrite, getCurrentProfile, isAdmin } from "@/lib/auth";
 import { getWorkItem, priorityOptions } from "@/lib/team-success";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,10 @@ type PageProps = {
 
 export default async function EditWorkItemPage({ params, searchParams }: PageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const data = await getWorkItem(id);
+  const [data, profile] = await Promise.all([getWorkItem(id), getCurrentProfile()]);
   if (!data) notFound();
   const { item, members } = data;
+  const canEdit = isAdmin(profile) || (canWrite(profile) && profile?.member.id === item.owner_id);
 
   return (
     <Shell>
@@ -26,6 +28,12 @@ export default async function EditWorkItemPage({ params, searchParams }: PagePro
             <h1>Edit Work Item</h1>
           </div>
         </div>
+        {!canEdit ? (
+          <div className="empty-state small-state">
+            <h2>Admin or owner required</h2>
+            <p>You can view this work item, but only admins and the assigned owner can edit it.</p>
+          </div>
+        ) : (
         <form action={updateWorkItem} className="stack-form">
           <input type="hidden" name="id" value={item.id} />
           <Field label="Title"><input name="title" defaultValue={item.title} required /></Field>
@@ -45,6 +53,7 @@ export default async function EditWorkItemPage({ params, searchParams }: PagePro
           </div>
           <button className="button-primary" type="submit">Save Changes</button>
         </form>
+        )}
       </section>
     </Shell>
   );

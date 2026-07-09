@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { signOut } from "@/lib/actions";
+import { getCurrentProfile } from "@/lib/auth";
 import { formatDate, priorityLabel, statusLabel, type Priority, type Status } from "@/lib/team-success";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export async function Shell({ children }: { children: React.ReactNode }) {
+  const profile = await getCurrentProfile();
   return (
     <main className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
@@ -11,9 +14,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link className="nav-link" href="/dashboard">Dashboard</Link>
             <Link className="nav-link" href="/team">Team</Link>
             <Link className="nav-link" href="/activity">Activity</Link>
+            <Link className="nav-link" href="/profile">Profile</Link>
             <Link className="button-primary" href="/work-items/new">Log Work Item</Link>
+            {profile ? (
+              <form action={signOut}>
+                <button className="button-ghost" type="submit">Sign Out</button>
+              </form>
+            ) : (
+              <Link className="button-secondary" href="/login">Log In</Link>
+            )}
           </nav>
         </div>
+        {profile ? (
+          <div className="identity-bar">
+            <span>{profile.member.name}</span>
+            <span className="badge">{profile.member.role}</span>
+          </div>
+        ) : (
+          <div className="identity-bar">
+            <span>Viewing demo data. Log in to create, edit, or submit updates.</span>
+          </div>
+        )}
       </header>
       <div className="mx-auto max-w-7xl px-5 py-6">{children}</div>
     </main>
