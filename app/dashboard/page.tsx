@@ -14,11 +14,21 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const [items, members, profile] = await Promise.all([getWorkItems(), getTeamMembers(), getCurrentProfile()]);
   const writable = canWrite(profile);
   const showArchived = params.archived === "true";
+  const search = (params.q ?? "").trim().toLowerCase();
   const filtered = items.filter((item) => {
     if (!showArchived && item.archived) return false;
     if (params.status && item.status !== params.status) return false;
     if (params.owner && item.owner_id !== params.owner) return false;
     if (params.priority && item.priority !== params.priority) return false;
+    if (params.due_from && (!item.due_date || item.due_date < params.due_from)) return false;
+    if (params.due_to && (!item.due_date || item.due_date > params.due_to)) return false;
+    if (search) {
+      const searchable = [item.title, item.description, item.owner?.name, item.owner?.email]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!searchable.includes(search)) return false;
+    }
     return true;
   });
   const blockedCount = items.filter((item) => item.status === "blocked" && !item.archived).length;
@@ -38,6 +48,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       </section>
 
       <form className="filter-bar">
+        <input
+          name="q"
+          type="search"
+          defaultValue={params.q ?? ""}
+          placeholder="Search work or owner"
+          aria-label="Search work items or owners"
+        />
         <select name="status" defaultValue={params.status ?? ""}>
           <option value="">All statuses</option>
           {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -50,12 +67,28 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <option value="">All priorities</option>
           {priorityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+        <input
+          name="due_from"
+          type="date"
+          defaultValue={params.due_from ?? ""}
+          aria-label="Due on or after"
+          title="Due on or after"
+        />
+        <input
+          name="due_to"
+          type="date"
+          defaultValue={params.due_to ?? ""}
+          aria-label="Due on or before"
+          title="Due on or before"
+        />
         <label className="toggle">
           <input type="checkbox" name="archived" value="true" defaultChecked={showArchived} />
           Show archived
         </label>
-        <button className="button-secondary" type="submit">Apply</button>
-        <Link href="/dashboard" className="button-ghost">Reset</Link>
+        <div className="filter-actions">
+          <button className="button-secondary" type="submit">Apply</button>
+          <Link href="/dashboard" className="button-ghost">Reset</Link>
+        </div>
       </form>
 
       <section className="focus-strip">
