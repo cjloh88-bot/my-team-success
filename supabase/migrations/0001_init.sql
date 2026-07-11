@@ -1,3 +1,11 @@
+create table if not exists app_migrations (
+  version text primary key,
+  applied_at timestamptz not null default now()
+);
+alter table app_migrations enable row level security;
+drop policy if exists "app_migrations_read_all" on app_migrations;
+create policy "app_migrations_read_all" on app_migrations for select using (true);
+
 create table if not exists team_members (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,
@@ -138,3 +146,6 @@ on conflict (id) do update set
   blockers = excluded.blockers,
   hours_spent = excluded.hours_spent,
   is_current = excluded.is_current;
+
+insert into app_migrations (version) values ('0001_init')
+on conflict (version) do update set applied_at = now();

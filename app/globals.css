@@ -351,6 +351,47 @@ textarea:focus {
   margin-top: 1.75rem;
 }
 
+.work-section + .work-section {
+  margin-top: 2rem;
+}
+
+.readiness-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.readiness-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--line);
+  background: white;
+  padding: 0.9rem 0;
+}
+
+.readiness-row p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.readiness-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.readiness-dot.ready {
+  background: #16a34a;
+}
+
+.migration-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .card-row {
   display: flex;
   align-items: start;
@@ -684,5 +725,14 @@ textarea:focus {
   .empty-state,
   .insight-card {
     padding: 0.85rem;
+  }
+
+  .readiness-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .readiness-row > .badge {
+    grid-column: 2;
+    justify-self: start;
   }
 }

@@ -115,6 +115,17 @@ export type TeamInsightReport = {
   queuedNotifications: NotificationDelivery[];
 };
 
+export type DeploymentReadiness = {
+  databaseConnected: boolean;
+  databaseMode: "cloud" | "self-hosted" | "not-configured";
+  appliedMigrations: string[];
+  missingMigrations: string[];
+  serviceRoleConfigured: boolean;
+  openAIConfigured: boolean;
+  slackConfigured: boolean;
+  cronConfigured: boolean;
+};
+
 export const statusOptions: { value: Status; label: string }[] = [
   { value: "not_started", label: "Not Started" },
   { value: "in_progress", label: "In Progress" },
@@ -400,4 +411,38 @@ export async function getTeamInsightReport() {
   const { data, error } = await supabase.from("weekly_updates").select("*").order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return buildTeamInsightReport(members, items, data as WeeklyUpdate[], notifications);
+}
+
+export async function getDeploymentReadiness(): Promise<DeploymentReadiness> {
+  const expectedMigrations = ["0001_init", "0002_lockdown_rls", "0003_intelligence_and_notifications"];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!hasSupabaseEnv()) {
+    return {
+      databaseConnected: false,
+      databaseMode: "not-configured",
+      appliedMigrations: [],
+      missingMigrations: expectedMigrations,
+      serviceRoleConfigured: false,
+      openAIConfigured: Boolean(process.env.OPENAI_API_KEY),
+      slackConfigured: Boolean(process.env.SLACK_WEBHOOK_URL),
+      cronConfigured: Boolean(process.env.CRON_SECRET),
+    };
+  }
+
+  const supabase = await createClient();
+  const [{ error: connectionError }, { data: migrations, error: migrationError }] = await Promise.all([
+    supabase.from("team_members").select("id").limit(1),
+    supabase.from("app_migrations").select("version").order("version"),
+  ]);
+  const appliedMigrations = migrationError ? [] : (migrations ?? []).map((row) => String(row.version));
+  return {
+    databaseConnected: !connectionError,
+    databaseMode: url?.includes(".supabase.co") ? "cloud" : "self-hosted",
+    appliedMigrations,
+    missingMigrations: expectedMigrations.filter((migration) => !appliedMigrations.includes(migration)),
+    serviceRoleConfigured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    openAIConfigured: Boolean(process.env.OPENAI_API_KEY),
+    slackConfigured: Boolean(process.env.SLACK_WEBHOOK_URL),
+    cronConfigured: Boolean(process.env.CRON_SECRET),
+  };
 }

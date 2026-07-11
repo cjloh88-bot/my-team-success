@@ -24,6 +24,10 @@ $$;
 
 drop policy if exists "team_members_v1_read" on team_members;
 drop policy if exists "team_members_v1_write" on team_members;
+drop policy if exists "team_members_read_all" on team_members;
+drop policy if exists "team_members_insert_self_or_admin" on team_members;
+drop policy if exists "team_members_update_self_link_or_admin" on team_members;
+drop policy if exists "team_members_delete_admin" on team_members;
 create policy "team_members_read_all" on team_members for select using (true);
 create policy "team_members_insert_self_or_admin" on team_members for insert with check (
   public.is_team_admin()
@@ -42,6 +46,10 @@ create policy "team_members_delete_admin" on team_members for delete using (publ
 
 drop policy if exists "work_items_v1_read" on work_items;
 drop policy if exists "work_items_v1_write" on work_items;
+drop policy if exists "work_items_read_all" on work_items;
+drop policy if exists "work_items_insert_member_admin" on work_items;
+drop policy if exists "work_items_update_owner_admin" on work_items;
+drop policy if exists "work_items_delete_admin" on work_items;
 create policy "work_items_read_all" on work_items for select using (true);
 create policy "work_items_insert_member_admin" on work_items for insert with check (
   public.current_team_role() in ('admin', 'member')
@@ -58,6 +66,10 @@ create policy "work_items_delete_admin" on work_items for delete using (public.i
 
 drop policy if exists "weekly_updates_v1_read" on weekly_updates;
 drop policy if exists "weekly_updates_v1_write" on weekly_updates;
+drop policy if exists "weekly_updates_read_all" on weekly_updates;
+drop policy if exists "weekly_updates_insert_member_admin" on weekly_updates;
+drop policy if exists "weekly_updates_update_owner_admin" on weekly_updates;
+drop policy if exists "weekly_updates_delete_admin" on weekly_updates;
 create policy "weekly_updates_read_all" on weekly_updates for select using (true);
 create policy "weekly_updates_insert_member_admin" on weekly_updates for insert with check (
   public.current_team_role() in ('admin', 'member')
@@ -75,6 +87,10 @@ create policy "weekly_updates_delete_admin" on weekly_updates for delete using (
 
 drop policy if exists "activities_v1_read" on activities;
 drop policy if exists "activities_v1_write" on activities;
+drop policy if exists "activities_read_all" on activities;
+drop policy if exists "activities_insert_member_admin" on activities;
+drop policy if exists "activities_update_admin" on activities;
+drop policy if exists "activities_delete_admin" on activities;
 create policy "activities_read_all" on activities for select using (true);
 create policy "activities_insert_member_admin" on activities for insert with check (
   public.current_team_role() in ('admin', 'member')
@@ -84,6 +100,8 @@ create policy "activities_delete_admin" on activities for delete using (public.i
 
 drop policy if exists "audit_logs_v1_read" on audit_logs;
 drop policy if exists "audit_logs_v1_write" on audit_logs;
+drop policy if exists "audit_logs_read_admin" on audit_logs;
+drop policy if exists "audit_logs_insert_member_admin" on audit_logs;
 create policy "audit_logs_read_admin" on audit_logs for select using (public.is_team_admin());
 create policy "audit_logs_insert_member_admin" on audit_logs for insert with check (
   public.current_team_role() in ('admin', 'member')
@@ -91,6 +109,10 @@ create policy "audit_logs_insert_member_admin" on audit_logs for insert with che
 
 drop policy if exists "weekly_digests_v1_read" on weekly_digests;
 drop policy if exists "weekly_digests_v1_write" on weekly_digests;
+drop policy if exists "weekly_digests_read_team" on weekly_digests;
+drop policy if exists "weekly_digests_insert_admin" on weekly_digests;
+drop policy if exists "weekly_digests_update_admin" on weekly_digests;
+drop policy if exists "weekly_digests_delete_admin" on weekly_digests;
 create policy "weekly_digests_read_team" on weekly_digests for select using (
   published = true
   or public.current_team_role() in ('admin', 'member', 'viewer')
@@ -101,3 +123,6 @@ create policy "weekly_digests_insert_admin" on weekly_digests for insert with ch
 );
 create policy "weekly_digests_update_admin" on weekly_digests for update using (public.is_team_admin()) with check (public.is_team_admin());
 create policy "weekly_digests_delete_admin" on weekly_digests for delete using (public.is_team_admin());
+
+insert into app_migrations (version) values ('0002_lockdown_rls')
+on conflict (version) do update set applied_at = now();

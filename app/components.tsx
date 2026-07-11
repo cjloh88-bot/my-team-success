@@ -6,11 +6,13 @@ import { AppNavigation } from "@/app/navigation";
 
 export async function Shell({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile();
+  const signedIn = Boolean(profile);
+  const admin = profile?.member.role === "admin";
   return (
     <main className="app-shell">
       <aside className="app-sidebar">
         <Link href="/dashboard" className="sidebar-brand">my-team-success</Link>
-        <AppNavigation className="sidebar-nav" />
+        <AppNavigation className="sidebar-nav" signedIn={signedIn} admin={admin} />
         <div className="sidebar-footer">
           <Link className="button-primary sidebar-command" href="/work-items/new">Log Work Item</Link>
           {profile ? (
@@ -38,7 +40,7 @@ export async function Shell({ children }: { children: React.ReactNode }) {
           <details className="mobile-menu">
             <summary className="mobile-menu-trigger">Menu</summary>
             <div className="mobile-menu-panel">
-              <AppNavigation className="mobile-nav" />
+              <AppNavigation className="mobile-nav" signedIn={signedIn} admin={admin} />
               <Link className="button-primary mobile-command" href="/work-items/new">Log Work Item</Link>
               {profile ? (
                 <form action={signOut}><button className="button-ghost mobile-command" type="submit">Sign Out</button></form>

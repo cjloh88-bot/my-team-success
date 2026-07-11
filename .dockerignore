@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+.pnpm-store
+.env
+.env.local
+deploy/local/runtime
+deploy/local/backups
+deploy/local/offline-bundle
+npm-debug.log*

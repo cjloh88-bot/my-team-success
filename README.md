@@ -23,6 +23,10 @@ bun dev
 
 Open http://localhost:3000. Edit `app/page.tsx` to start building.
 
+## Standalone company deployment
+
+For an Always ON Windows PC with no external runtime connections, use the self-hosted Docker package in [deploy/local/README.md](deploy/local/README.md). It runs the app, authentication, database, migrations, health checks, startup tasks, and backups locally.
+
 ## Provisioning a new project
 
 Use the `/new-vibe-project <name>` skill (see `claude-dotfiles` repo) which:
