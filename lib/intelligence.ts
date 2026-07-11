@@ -11,6 +11,12 @@ export type WorkItemInsightDraft = {
   confidence: number;
 };
 
+export type WeeklyDigestDraft = {
+  summary: string;
+  source: string;
+  confidence: number;
+};
+
 function daysSince(value: string | null | undefined) {
   if (!value) return 7;
   return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000));
@@ -92,6 +98,32 @@ export async function draftWorkItemInsight(item: WorkItemView, updates: WeeklyUp
     return { ...fallback, summary, blockers, source: process.env.OPENAI_MODEL ?? "gpt-5.4-mini", confidence: 0.84 };
   } catch {
     return fallback;
+  }
+}
+
+export async function draftWeeklyDigestWithAI(fallback: string, weeklyContext: string): Promise<WeeklyDigestDraft> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { summary: fallback, source: "rule-engine-v2", confidence: 0.82 };
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+        input: [
+          "Draft a concise weekly team update for an internal audience.",
+          "Use only the supplied facts. State wins, blockers, and the most important next actions. Plain text only.",
+          weeklyContext,
+        ].join("\n\n"),
+      }),
+    });
+    if (!response.ok) return { summary: fallback, source: "rule-engine-v2", confidence: 0.82 };
+    const summary = extractResponseText(await response.json())?.trim();
+    if (!summary) return { summary: fallback, source: "rule-engine-v2", confidence: 0.82 };
+    return { summary, source: process.env.OPENAI_MODEL ?? "gpt-5.4-mini", confidence: 0.84 };
+  } catch {
+    return { summary: fallback, source: "rule-engine-v2", confidence: 0.82 };
   }
 }
 

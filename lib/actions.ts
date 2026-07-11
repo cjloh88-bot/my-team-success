@@ -16,7 +16,7 @@ import {
   type WeeklyUpdate,
   type WorkItem,
 } from "@/lib/team-success";
-import { draftWorkItemInsight } from "@/lib/intelligence";
+import { draftWeeklyDigestWithAI, draftWorkItemInsight } from "@/lib/intelligence";
 import { buildReminderCandidates, deliverQueuedSlack, isSlackConfigured, queueReminderCandidates } from "@/lib/notifications";
 
 function requireDatabase(fallbackPath: string) {
@@ -363,14 +363,23 @@ export async function draftWeeklyDigest(formData: FormData) {
     }),
   ];
 
+  const draft = await draftWeeklyDigestWithAI(lines.join("\n"), [
+    `Week start: ${weekStartValue}`,
+    ...updateRows.map((update) => {
+      const member = memberRows.find((row) => row.id === update.submitted_by)?.name ?? "Team member";
+      const item = itemRows.find((row) => row.id === update.work_item_id)?.title ?? "Work item";
+      return `${member} | ${item} | ${update.status} | ${update.progress_notes ?? "No notes"}${update.blockers ? ` | Blocker: ${update.blockers}` : ""}`;
+    }),
+  ].join("\n"));
+
   const { data, error } = await supabase
     .from("weekly_digests")
     .insert({
       user_id: admin.user.id,
       week_start: weekStartValue,
-      summary_text: lines.join("\n"),
-      summary_source: "rule-engine-v1",
-      summary_confidence: updateRows.length > 0 ? 0.82 : 0.45,
+      summary_text: draft.summary,
+      summary_source: draft.source,
+      summary_confidence: updateRows.length > 0 ? draft.confidence : 0.45,
       summary_review_status: "unreviewed",
       published: false,
     })
@@ -381,7 +390,7 @@ export async function draftWeeklyDigest(formData: FormData) {
   await supabase.from("activities").insert({
     actor_id: admin.member.id,
     action: "digest_drafted",
-    detail: { digest_id: data.id, week_start: weekStartValue, source: "rule-engine-v1" },
+    detail: { digest_id: data.id, week_start: weekStartValue, source: draft.source },
   });
   await logAudit("weekly_digests", data.id, "insert", null, data, admin.member.id);
   revalidatePath("/digests");

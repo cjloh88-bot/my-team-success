@@ -1,5 +1,9 @@
 # Tasks & Sprints
 
+## Implementation Status
+
+All Sprint 1-4 product code is implemented in this repository, including the AI-enabled digest fallback, role-aware workflows, dashboard filters, intelligence view, and reminder queue. The remaining activation work is external: apply `supabase/migrations/0002_lockdown_rls.sql` and `supabase/migrations/0003_intelligence_and_notifications.sql` to the production Supabase database, then configure optional Vercel environment variables for OpenAI, Slack, and the scheduled reminder secret.
+
 ## Sprint 1 — Database & Core Work Item Engine
 **Goal:** The one core action works end-to-end: a team member logs a work item and submits a weekly update; the shared dashboard reflects it instantly. No login required.
 

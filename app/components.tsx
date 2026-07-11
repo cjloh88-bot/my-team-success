@@ -2,43 +2,60 @@ import Link from "next/link";
 import { signOut } from "@/lib/actions";
 import { getCurrentProfile } from "@/lib/auth";
 import { formatDate, priorityLabel, statusLabel, type Priority, type Status } from "@/lib/team-success";
+import { AppNavigation } from "@/app/navigation";
 
 export async function Shell({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile();
   return (
-    <main className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
-          <Link href="/dashboard" className="text-lg font-semibold tracking-tight">my-team-success</Link>
-          <nav className="flex flex-wrap gap-2 text-sm">
-            <Link className="nav-link" href="/dashboard">Dashboard</Link>
-            <Link className="nav-link" href="/team">Team</Link>
-            <Link className="nav-link" href="/activity">Activity</Link>
-            <Link className="nav-link" href="/digests">Digests</Link>
-            <Link className="nav-link" href="/insights">Insights</Link>
-            <Link className="nav-link" href="/profile">Profile</Link>
-            <Link className="button-primary" href="/work-items/new">Log Work Item</Link>
-            {profile ? (
+    <main className="app-shell">
+      <aside className="app-sidebar">
+        <Link href="/dashboard" className="sidebar-brand">my-team-success</Link>
+        <AppNavigation className="sidebar-nav" />
+        <div className="sidebar-footer">
+          <Link className="button-primary sidebar-command" href="/work-items/new">Log Work Item</Link>
+          {profile ? (
+            <>
+              <div className="sidebar-identity">
+                <strong>{profile.member.name}</strong>
+                <span className="badge">{profile.member.role}</span>
+              </div>
               <form action={signOut}>
-                <button className="button-ghost" type="submit">Sign Out</button>
+                <button className="button-ghost sidebar-command" type="submit">Sign Out</button>
               </form>
-            ) : (
-              <Link className="button-secondary" href="/login">Log In</Link>
-            )}
-          </nav>
+            </>
+          ) : (
+            <>
+              <p className="sidebar-note">Viewing demo data</p>
+              <Link className="button-secondary sidebar-command" href="/login">Log In</Link>
+            </>
+          )}
         </div>
+      </aside>
+
+      <section className="app-frame">
+        <header className="mobile-header">
+          <Link href="/dashboard" className="mobile-brand">my-team-success</Link>
+          <details className="mobile-menu">
+            <summary className="mobile-menu-trigger">Menu</summary>
+            <div className="mobile-menu-panel">
+              <AppNavigation className="mobile-nav" />
+              <Link className="button-primary mobile-command" href="/work-items/new">Log Work Item</Link>
+              {profile ? (
+                <form action={signOut}><button className="button-ghost mobile-command" type="submit">Sign Out</button></form>
+              ) : (
+                <Link className="button-secondary mobile-command" href="/login">Log In</Link>
+              )}
+            </div>
+          </details>
+        </header>
         {profile ? (
-          <div className="identity-bar">
+          <div className="identity-bar mobile-identity">
             <span>{profile.member.name}</span>
             <span className="badge">{profile.member.role}</span>
           </div>
-        ) : (
-          <div className="identity-bar">
-            <span>Viewing demo data. Log in to create, edit, or submit updates.</span>
-          </div>
-        )}
-      </header>
-      <div className="mx-auto max-w-7xl px-5 py-6">{children}</div>
+        ) : null}
+        <div className="app-page">{children}</div>
+      </section>
     </main>
   );
 }
