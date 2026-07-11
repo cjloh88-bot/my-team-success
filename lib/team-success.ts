@@ -61,11 +61,58 @@ export type WeeklyDigest = {
   created_at: string;
 };
 
+export type WorkItemInsight = {
+  id: string;
+  work_item_id: string;
+  summary_text: string;
+  blockers: string[];
+  risk_flag: "low" | "medium" | "high";
+  risk_score: number;
+  source: string;
+  confidence: number;
+  generated_by: string | null;
+  generated_at: string;
+};
+
+export type NotificationDelivery = {
+  id: string;
+  reminder_key: string;
+  work_item_id: string;
+  recipient_id: string | null;
+  channel: "slack";
+  notification_type: "overdue" | "stale_update";
+  message: string;
+  status: "queued" | "sent" | "failed";
+  attempts: number;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+};
+
 export type WorkItemView = Omit<WorkItem, "risk_score"> & {
   risk_score: number;
   owner: TeamMember | null;
   latestUpdate: WeeklyUpdate | null;
   updateCount: number;
+};
+
+export type TeamWorkload = {
+  member: TeamMember;
+  activeItems: number;
+  highRiskItems: number;
+  overdueItems: number;
+  currentWeekHours: number;
+  previousWeekHours: number;
+  currentWeekUpdates: number;
+  workloadScore: number;
+  trend: "up" | "steady" | "down" | "no_data";
+};
+
+export type TeamInsightReport = {
+  workloads: TeamWorkload[];
+  highRiskItems: WorkItemView[];
+  staleItems: WorkItemView[];
+  queuedNotifications: NotificationDelivery[];
 };
 
 export const statusOptions: { value: Status; label: string }[] = [
@@ -289,4 +336,68 @@ export async function getWeeklyDigests() {
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data as WeeklyDigest[];
+}
+
+export async function getWorkItemInsight(workItemId: string) {
+  if (!hasSupabaseEnv()) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("work_item_insights")
+    .select("*")
+    .eq("work_item_id", workItemId)
+    .maybeSingle();
+  if (error) return null;
+  return data as WorkItemInsight | null;
+}
+
+export async function getNotificationDeliveries() {
+  if (!hasSupabaseEnv()) return [] as NotificationDelivery[];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("notification_deliveries")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) return [] as NotificationDelivery[];
+  return data as NotificationDelivery[];
+}
+
+function previousWeekStart() {
+  const date = new Date(`${currentWeekStart()}T00:00:00`);
+  date.setDate(date.getDate() - 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildTeamInsightReport(members: TeamMember[], items: WorkItemView[], updates: WeeklyUpdate[], notifications: NotificationDelivery[]) {
+  const currentWeek = currentWeekStart();
+  const previousWeek = previousWeekStart();
+  const workloads = members.map((member) => {
+    const owned = items.filter((item) => item.owner_id === member.id && !item.archived && item.status !== "complete");
+    const current = updates.filter((update) => update.submitted_by === member.id && update.week_start === currentWeek);
+    const previous = updates.filter((update) => update.submitted_by === member.id && update.week_start === previousWeek);
+    const currentWeekHours = current.reduce((total, update) => total + Number(update.hours_spent ?? 0), 0);
+    const previousWeekHours = previous.reduce((total, update) => total + Number(update.hours_spent ?? 0), 0);
+    const highRiskItems = owned.filter((item) => item.risk_score >= 0.7).length;
+    const overdueItems = owned.filter((item) => item.due_date && new Date(`${item.due_date}T00:00:00`) < new Date()).length;
+    const workloadScore = Math.min(100, Math.round(owned.length * 20 + currentWeekHours * 3 + highRiskItems * 15 + overdueItems * 15));
+    const trend = current.length === 0 && previous.length === 0
+      ? "no_data"
+      : current.length > previous.length ? "up" : current.length < previous.length ? "down" : "steady";
+    return { member, activeItems: owned.length, highRiskItems, overdueItems, currentWeekHours, previousWeekHours, currentWeekUpdates: current.length, workloadScore, trend } satisfies TeamWorkload;
+  }).sort((a, b) => b.workloadScore - a.workloadScore || a.member.name.localeCompare(b.member.name));
+  return {
+    workloads,
+    highRiskItems: items.filter((item) => !item.archived && item.status !== "complete" && item.risk_score >= 0.7),
+    staleItems: items.filter((item) => !item.archived && item.status !== "complete" && (!item.latestUpdate || (Date.now() - new Date(item.latestUpdate.created_at).getTime()) / 86400000 >= 7)),
+    queuedNotifications: notifications,
+  } satisfies TeamInsightReport;
+}
+
+export async function getTeamInsightReport() {
+  const [members, items, notifications] = await Promise.all([getTeamMembers(), getWorkItems(), getNotificationDeliveries()]);
+  if (!hasSupabaseEnv()) return buildTeamInsightReport(members, items, demoUpdates, notifications);
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("weekly_updates").select("*").order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return buildTeamInsightReport(members, items, data as WeeklyUpdate[], notifications);
 }

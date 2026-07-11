@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { getCurrentProfile, isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
+  calculateRiskScore,
   currentWeekStart,
+  getWorkItem,
+  getWorkItems,
   hasSupabaseEnv,
   isAllowedTransition,
   type Priority,
@@ -13,6 +16,8 @@ import {
   type WeeklyUpdate,
   type WorkItem,
 } from "@/lib/team-success";
+import { draftWorkItemInsight } from "@/lib/intelligence";
+import { buildReminderCandidates, deliverQueuedSlack, isSlackConfigured, queueReminderCandidates } from "@/lib/notifications";
 
 function requireDatabase(fallbackPath: string) {
   if (!hasSupabaseEnv()) {
@@ -208,7 +213,7 @@ export async function submitWeeklyUpdate(formData: FormData) {
 
   const { data: after, error: workItemError } = await supabase
     .from("work_items")
-    .update({ status })
+    .update({ status, risk_score: calculateRiskScore({ status, due_date: before.due_date }, { created_at: update.created_at }) })
     .eq("id", workItemId)
     .select("*")
     .single();
@@ -423,4 +428,95 @@ export async function publishWeeklyDigest(formData: FormData) {
   await logAudit("weekly_digests", id, "update", before, data, admin.member.id);
   revalidatePath("/digests");
   redirect("/digests?success=Digest published");
+}
+
+export async function refreshRiskScores() {
+  const admin = await requireAdmin("/insights");
+  const items = await getWorkItems();
+  const supabase = await createClient();
+  const activeItems = items.filter((item) => !item.archived);
+  const results = await Promise.all(activeItems.map((item) => supabase
+    .from("work_items")
+    .update({ risk_score: item.risk_score })
+    .eq("id", item.id)));
+  const failure = results.find((result) => result.error)?.error;
+  if (failure) redirect(`/insights?error=${encodeURIComponent(failure.message)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: "risk_scores_refreshed",
+    detail: { work_item_count: activeItems.length },
+  });
+  await logAudit("work_items", null, "risk_scores_refreshed", null, { work_item_count: activeItems.length }, admin.member.id);
+  revalidatePath("/dashboard");
+  revalidatePath("/insights");
+  redirect(`/insights?success=Risk scores refreshed for ${activeItems.length} work items`);
+}
+
+export async function generateWorkItemInsight(formData: FormData) {
+  const id = text(formData, "work_item_id");
+  const admin = await requireAdmin(`/work-items/${id}`);
+  const data = await getWorkItem(id);
+  if (!data) redirect(`/work-items/${id}?error=Work item not found`);
+  const draft = await draftWorkItemInsight(data.item, data.updates);
+  const supabase = await createClient();
+  const payload = {
+    work_item_id: id,
+    summary_text: draft.summary,
+    blockers: draft.blockers,
+    risk_flag: draft.riskFlag,
+    risk_score: draft.riskScore,
+    source: draft.source,
+    confidence: draft.confidence,
+    generated_by: admin.member.id,
+    generated_at: new Date().toISOString(),
+  };
+  const { data: saved, error } = await supabase
+    .from("work_item_insights")
+    .upsert(payload, { onConflict: "work_item_id" })
+    .select("*")
+    .single();
+  if (error) redirect(`/work-items/${id}?error=${encodeURIComponent(`Could not save insight. Apply migration 0003 first: ${error.message}`)}`);
+  await supabase.from("activities").insert({
+    work_item_id: id,
+    actor_id: admin.member.id,
+    action: "work_item_insight_drafted",
+    detail: { source: draft.source, risk_flag: draft.riskFlag },
+  });
+  await logAudit("work_item_insights", saved.id, "upsert", null, saved, admin.member.id);
+  revalidatePath(`/work-items/${id}`);
+  revalidatePath("/insights");
+  redirect(`/work-items/${id}?success=Work item insight drafted`);
+}
+
+export async function queueOverdueReminders() {
+  const admin = await requireAdmin("/insights");
+  const items = await getWorkItems();
+  const candidates = buildReminderCandidates(items);
+  const supabase = await createClient();
+  const { queued, error } = await queueReminderCandidates(supabase, candidates);
+  if (error) redirect(`/insights?error=${encodeURIComponent(`Could not queue reminders. Apply migration 0003 first: ${error.message}`)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: "reminders_queued",
+    detail: { reminder_count: queued },
+  });
+  await logAudit("notification_deliveries", null, "queue", null, { reminder_count: queued }, admin.member.id);
+  revalidatePath("/insights");
+  redirect(`/insights?success=${queued === 0 ? "No overdue or stale reminders were needed" : `${queued} reminders queued`}`);
+}
+
+export async function deliverQueuedNotifications() {
+  const admin = await requireAdmin("/insights");
+  if (!isSlackConfigured()) redirect("/insights?error=SLACK_WEBHOOK_URL is not configured");
+  const supabase = await createClient();
+  const result = await deliverQueuedSlack(supabase);
+  if (result.error) redirect(`/insights?error=${encodeURIComponent(result.error)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: "slack_reminders_delivered",
+    detail: { sent: result.sent, failed: result.failed },
+  });
+  await logAudit("notification_deliveries", null, "deliver", null, result, admin.member.id);
+  revalidatePath("/insights");
+  redirect(`/insights?success=${result.sent} Slack reminders sent${result.failed ? `; ${result.failed} failed` : ""}`);
 }

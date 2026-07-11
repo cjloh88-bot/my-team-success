@@ -212,7 +212,8 @@ textarea:focus {
 .timeline-card,
 .form-panel,
 .side-panel,
-.empty-state {
+.empty-state,
+.insight-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -232,6 +233,35 @@ textarea:focus {
 .high-risk {
   border-color: #fecdd3;
   box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.risk-low { background: #dcfce7; color: #166534; }
+.risk-medium { background: #fef3c7; color: #92400e; }
+.risk-high { background: #ffe4e6; color: #9f1239; }
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.75rem 0 0.8rem;
+}
+
+.section-heading h2,
+.section-heading p {
+  margin: 0;
+}
+
+.insight-card {
+  margin-top: 1rem;
+}
+
+.insight-card > p {
+  color: var(--muted);
+}
+
+.notification-history {
+  margin-top: 1.75rem;
 }
 
 .card-row {
@@ -452,5 +482,10 @@ textarea:focus {
 
   .side-panel {
     position: static;
+  }
+
+  .section-heading {
+    align-items: start;
+    flex-direction: column;
   }
 }

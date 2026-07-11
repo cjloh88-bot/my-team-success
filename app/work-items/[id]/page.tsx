@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateText, Field, Metric, Notice, PriorityBadge, Shell, StatusBadge } from "@/app/components";
-import { archiveWorkItem, submitWeeklyUpdate } from "@/lib/actions";
+import { archiveWorkItem, generateWorkItemInsight, submitWeeklyUpdate } from "@/lib/actions";
 import { canWrite, getCurrentProfile, isAdmin } from "@/lib/auth";
-import { getWorkItem, statusOptions } from "@/lib/team-success";
+import { getWorkItem, getWorkItemInsight, statusOptions } from "@/lib/team-success";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ type PageProps = {
 
 export default async function WorkItemDetailPage({ params, searchParams }: PageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [data, profile] = await Promise.all([getWorkItem(id), getCurrentProfile()]);
+  const [data, profile, insight] = await Promise.all([getWorkItem(id), getCurrentProfile(), getWorkItemInsight(id)]);
   if (!data) notFound();
   const { item, members, updates, activities } = data;
   const writable = canWrite(profile);
@@ -51,6 +51,31 @@ export default async function WorkItemDetailPage({ params, searchParams }: PageP
             <StatusBadge status={item.status} />
             <PriorityBadge priority={item.priority} />
           </div>
+
+          <section className="insight-card">
+            <div className="card-row">
+              <div>
+                <p className="eyebrow">Work item insight</p>
+                <h2>{insight ? "Latest drafted summary" : "No drafted summary"}</h2>
+              </div>
+              {isAdmin(profile) ? (
+                <form action={generateWorkItemInsight}>
+                  <input type="hidden" name="work_item_id" value={item.id} />
+                  <button className="button-secondary" type="submit">Draft Insight</button>
+                </form>
+              ) : null}
+            </div>
+            {insight ? (
+              <>
+                <p>{insight.summary_text}</p>
+                <div className="card-footer">
+                  <span className={`badge risk-${insight.risk_flag}`}>{insight.risk_flag} risk {Math.round(Number(insight.risk_score) * 100)}%</span>
+                  <span className="badge">{insight.source}</span>
+                </div>
+                {insight.blockers.length > 0 ? <p className="blocker">Blockers: {insight.blockers.join("; ")}</p> : null}
+              </>
+            ) : <p className="muted">Admins can draft a concise summary from the update history and current risk signals.</p>}
+          </section>
 
           <section className="history">
             <h2>Update History</h2>
