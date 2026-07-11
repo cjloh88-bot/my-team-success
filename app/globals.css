@@ -404,6 +404,23 @@ textarea:focus {
   padding-left: 0.75rem;
 }
 
+.digest-form {
+  grid-template-columns: minmax(12rem, 18rem) auto;
+  justify-content: start;
+}
+
+.digest-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 0.85rem;
+  color: var(--ink);
+  font-family: inherit;
+  line-height: 1.55;
+}
+
 .owned-list a {
   color: var(--brand-dark);
   font-weight: 650;

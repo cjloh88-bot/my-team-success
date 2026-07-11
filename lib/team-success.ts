@@ -49,6 +49,18 @@ export type Activity = {
   created_at: string;
 };
 
+export type WeeklyDigest = {
+  id: string;
+  user_id?: string | null;
+  week_start: string;
+  summary_text: string | null;
+  summary_source: string | null;
+  summary_confidence: number | null;
+  summary_review_status: "unreviewed" | "approved" | "rejected";
+  published: boolean;
+  created_at: string;
+};
+
 export type WorkItemView = Omit<WorkItem, "risk_score"> & {
   risk_score: number;
   owner: TeamMember | null;
@@ -123,6 +135,13 @@ export function priorityLabel(priority: Priority) {
 export function formatDate(value: string | null) {
   if (!value) return "No date";
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+export function currentWeekStart() {
+  const date = new Date();
+  const day = date.getDay();
+  date.setDate(date.getDate() - day + (day === 0 ? -6 : 1));
+  return date.toISOString().slice(0, 10);
 }
 
 export function calculateRiskScore(item: Pick<WorkItem, "status" | "due_date">, latestUpdate?: Pick<WeeklyUpdate, "created_at"> | null) {
@@ -258,4 +277,16 @@ export async function getActivities() {
     itemTitle: (items as Pick<WorkItem, "id" | "title">[]).find((item) => item.id === activity.work_item_id)?.title ?? "Unknown item",
     actorName: (members as TeamMember[]).find((member) => member.id === activity.actor_id)?.name ?? "Team member",
   }));
+}
+
+export async function getWeeklyDigests() {
+  if (!hasSupabaseEnv()) return [] as WeeklyDigest[];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("weekly_digests")
+    .select("*")
+    .order("week_start", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data as WeeklyDigest[];
 }

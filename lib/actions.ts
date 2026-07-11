@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentProfile, isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
+  currentWeekStart,
   hasSupabaseEnv,
   isAllowedTransition,
   type Priority,
@@ -48,11 +49,7 @@ async function requireAdmin(fallbackPath: string) {
 }
 
 function weekStart() {
-  const date = new Date();
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  date.setDate(diff);
-  return date.toISOString().slice(0, 10);
+  return currentWeekStart();
 }
 
 async function logAudit(tableName: string, recordId: string | null, action: string, beforeState: unknown, afterState: unknown, actorId?: string | null) {
@@ -326,4 +323,104 @@ export async function deleteTeamMember(formData: FormData) {
   revalidatePath("/team");
   revalidatePath("/dashboard");
   redirect("/team?success=Team member deleted");
+}
+
+export async function draftWeeklyDigest(formData: FormData) {
+  const admin = await requireAdmin("/digests");
+  const weekStartValue = text(formData, "week_start") || currentWeekStart();
+  const supabase = await createClient();
+  const [{ data: updates, error: updatesError }, { data: members, error: membersError }, { data: items, error: itemsError }] = await Promise.all([
+    supabase.from("weekly_updates").select("*").gte("week_start", weekStartValue).order("created_at", { ascending: false }),
+    supabase.from("team_members").select("*"),
+    supabase.from("work_items").select("id,title,status,due_date"),
+  ]);
+
+  if (updatesError || membersError || itemsError) {
+    redirect(`/digests?error=${encodeURIComponent(updatesError?.message ?? membersError?.message ?? itemsError?.message ?? "Could not draft digest")}`);
+  }
+
+  const updateRows = (updates ?? []) as WeeklyUpdate[];
+  const memberRows = (members ?? []) as { id: string; name: string }[];
+  const itemRows = (items ?? []) as { id: string; title: string; status: string; due_date: string | null }[];
+  const blocked = itemRows.filter((item) => item.status === "blocked").length;
+  const complete = updateRows.filter((update) => update.status === "complete").length;
+  const hours = updateRows.reduce((sum, update) => sum + Number(update.hours_spent ?? 0), 0);
+  const blockerNotes = updateRows.filter((update) => update.blockers).map((update) => update.blockers);
+  const lines = [
+    `Week of ${weekStartValue}: ${updateRows.length} updates submitted across ${new Set(updateRows.map((update) => update.work_item_id)).size} work items.`,
+    `${complete} updates marked complete, ${blocked} work items are currently blocked, and ${hours.toFixed(1)} hours were reported.`,
+    blockerNotes.length > 0 ? `Key blockers: ${blockerNotes.slice(0, 4).join("; ")}.` : "No blockers were reported in this week's updates.",
+    "Highlights:",
+    ...updateRows.slice(0, 6).map((update) => {
+      const member = memberRows.find((row) => row.id === update.submitted_by)?.name ?? "Team member";
+      const item = itemRows.find((row) => row.id === update.work_item_id)?.title ?? "Work item";
+      return `- ${member} on ${item}: ${update.progress_notes ?? "No notes provided"}`;
+    }),
+  ];
+
+  const { data, error } = await supabase
+    .from("weekly_digests")
+    .insert({
+      user_id: admin.user.id,
+      week_start: weekStartValue,
+      summary_text: lines.join("\n"),
+      summary_source: "rule-engine-v1",
+      summary_confidence: updateRows.length > 0 ? 0.82 : 0.45,
+      summary_review_status: "unreviewed",
+      published: false,
+    })
+    .select("*")
+    .single();
+
+  if (error) redirect(`/digests?error=${encodeURIComponent(error.message)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: "digest_drafted",
+    detail: { digest_id: data.id, week_start: weekStartValue, source: "rule-engine-v1" },
+  });
+  await logAudit("weekly_digests", data.id, "insert", null, data, admin.member.id);
+  revalidatePath("/digests");
+  redirect("/digests?success=Weekly digest drafted");
+}
+
+export async function reviewWeeklyDigest(formData: FormData) {
+  const admin = await requireAdmin("/digests");
+  const id = text(formData, "id");
+  const status = text(formData, "status");
+  if (!id || !["approved", "rejected"].includes(status)) redirect("/digests?error=Invalid digest review");
+  const supabase = await createClient();
+  const { data: before } = await supabase.from("weekly_digests").select("*").eq("id", id).single();
+  const { data, error } = await supabase
+    .from("weekly_digests")
+    .update({ summary_review_status: status })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) redirect(`/digests?error=${encodeURIComponent(error.message)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: `digest_${status}`,
+    detail: { digest_id: id },
+  });
+  await logAudit("weekly_digests", id, "update", before, data, admin.member.id);
+  revalidatePath("/digests");
+  redirect(`/digests?success=Digest ${status}`);
+}
+
+export async function publishWeeklyDigest(formData: FormData) {
+  const admin = await requireAdmin("/digests");
+  const id = text(formData, "id");
+  const supabase = await createClient();
+  const { data: before } = await supabase.from("weekly_digests").select("*").eq("id", id).single();
+  if (before?.summary_review_status !== "approved") redirect("/digests?error=Approve the digest before publishing");
+  const { data, error } = await supabase.from("weekly_digests").update({ published: true }).eq("id", id).select("*").single();
+  if (error) redirect(`/digests?error=${encodeURIComponent(error.message)}`);
+  await supabase.from("activities").insert({
+    actor_id: admin.member.id,
+    action: "digest_published",
+    detail: { digest_id: id },
+  });
+  await logAudit("weekly_digests", id, "update", before, data, admin.member.id);
+  revalidatePath("/digests");
+  redirect("/digests?success=Digest published");
 }

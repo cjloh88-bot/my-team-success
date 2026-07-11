@@ -14,6 +14,7 @@ export async function Shell({ children }: { children: React.ReactNode }) {
             <Link className="nav-link" href="/dashboard">Dashboard</Link>
             <Link className="nav-link" href="/team">Team</Link>
             <Link className="nav-link" href="/activity">Activity</Link>
+            <Link className="nav-link" href="/digests">Digests</Link>
             <Link className="nav-link" href="/profile">Profile</Link>
             <Link className="button-primary" href="/work-items/new">Log Work Item</Link>
             {profile ? (
